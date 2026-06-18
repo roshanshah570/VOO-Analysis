@@ -1,0 +1,201 @@
+---
+title: "VOO Analysis over the Past Year"
+output: html_document
+author: "Roshan Shah"
+date: "11/18/2025"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, tidy = TRUE, message = FALSE)
+```
+
+```{r}
+
+library(dplyr)
+library(lubridate)
+library(kableExtra)
+library(ggplot2)
+library(readr)
+
+VOO = read.csv("VOO.csv")
+```
+
+<h1 style="font-family: 'Times New Roman'; font-weight: bold;">Introduction</h1>
+
+This report analyzes daily price data from the past year for VOO, an ETF that that tracks the S&P 500. The data comes from yahoo finance, which is a platform that provides free stock market analysis tools, and this platform created the table needed to analyze the VOO's past year report.
+
+The variables in this data include Date, Open, High, Low, Close, Adjacent close, Gain, and Quarter. Open and Close tells us the opening and closing price for that date, Adjacent close tells us close after accounted for corporate actions, High and Low tells us the highest and lowest price reached at the date, Gain tells us whether the stock increased that day, and Quarter tells us which quarter of the year the Date is in.
+
+I picked this data set to analyze as the stock market has been down lately, and this ETF includes the USA's top 500 companies which will help see overall trends in the past year, which will help predict possible trends for the upcoming year(s). I will be investigating which quarter had the most number of Gains, which quarter had the highest volume of trades, and if volume has an impact on daily price range.
+
+<h1 style="font-family: 'Times New Roman'; font-weight: bold;">Data Collection</h1>
+
+To obtain this data, I used the yahoo finance platform to get a chart of VOO's data from the past year. I used manual scraping to read the data into R, so I copied it into a google sheet and downloaded it as a .csv file. To process my data I changed the date variable from string to date format, removed the dividend rows from the original chart as that misshaped the data, added the Quarter variable by checking the month of each date and dividing in into the respective quarter, added the Gain variable by subtracting every day's close from open and assigning gain or no gain, and finally added the Daily range variable by subtracting the high from the low for each date. The total number of observations in this data set is 250. I also have to convert the volume variable's observations from a string to numeric.
+
+<h1 style="font-family: 'Times New Roman'; font-weight: bold;">Description of Variables</h1>
+
+```{r}
+# Cleaning data set
+
+VOO_clean = VOO
+
+# Changing date variable from string to date format
+VOO_clean$Date = mdy(VOO_clean$Date)
+
+# Creating Gain variable, tells us the net change for each day
+net_change = VOO_clean$Close - VOO_clean$Open
+gain_flag = ifelse(net_change > 0, "Gain", "No Gain")
+VOO_clean = mutate(VOO_clean, Gain = gain_flag)
+
+# Creating Quarter variable, separates days into quarters of the year
+month_VOO = month(VOO_clean$Date) 
+quarter = ifelse(month_VOO >= 1 & month_VOO <= 3, "Q1",
+           ifelse(month_VOO >= 4 & month_VOO <= 6, "Q2",
+           ifelse(month_VOO >= 7 & month_VOO <= 9, "Q3", "Q4")))
+VOO_clean = mutate(VOO_clean, Quarter = quarter)
+
+# Creating Variable for daily price range
+price_range = VOO_clean$High - VOO_clean$Low
+VOO_clean = mutate(VOO_clean, Daily_range = price_range)
+
+# Converting volume to a numeric value from a string
+VOO_clean$Volume = as.numeric(gsub(",", "", VOO_clean$Volume))
+
+# Removing variables that will not be analyzed
+VOO_clean = select(VOO_clean, -(Adj.Close))
+
+# Table of each variable
+variable_descriptions = tibble(
+  Variable = c("Date", "Open", "High", "Low", "Close", "Volume", "Gain", "Quarter", "Daily Range"),
+  Type = c("Date", "Numeric", "Numeric", "Numeric", "Numeric", "Numeric", "Categorical", "Categorical", "Numeric"),
+  Description = c("The date",
+                  "The opening price of the stock on that date",
+                  "The highest price the stock reached on that date",
+                  "The lowest price the stock reached on that date",
+                  "The closing price of the stock on that date",
+                  "The number of shares traded on that date",
+                  "Tells us whether the stocks closing price is higher than the opening price",
+                  "The quarter of the year that date is in",
+                  "The range of the stock, difference between highest and lowest"))
+kable(variable_descriptions)
+```
+
+<h1 style="font-family: 'Times New Roman'; font-weight: bold;">Analysis of High prices, Low prices, Number of gains, Volume of shares sold</h1>
+
+```{r}
+# Histogram of all the high values of VOO stock in the past year
+
+ggplot(VOO_clean) + geom_histogram(aes(x=High), fill = 'dark green', col = 'black', bins = 25, binwidth = 10) + labs(title = "Distribution of VOO's High Prices over the past Year", x = "Price", y = "Frequency") + scale_x_continuous(breaks = seq(min(VOO_clean$High) + 0.51, max(VOO_clean$High) + 0.51, by = 20))
+```
+
+The distribution of highs of the VOO stock has a mean of $`r round(mean(VOO_clean$High),2)`, which aligns with the usual high range, and a range from $`r min(VOO_clean$High)`to $`r max(VOO_clean$High)`, which shows a $`r max(VOO_clean$High) - min(VOO_clean$High)` difference. The shape of the graph is slightly right skewed.
+
+```{r}
+# Histogram of all the Low values of VOO stock in the past year
+
+ggplot(VOO_clean) + geom_histogram(aes(x=Low), fill = 'dark green', col = 'black', bins = 25, binwidth = 10) + labs(title = "Distribtuion of VOO's Low Prices over the past Year", x = "Price", y = "Frequency") + scale_x_continuous(breaks = seq(min(VOO_clean$Low) + 0.2, max(VOO_clean$Low) + 0.2, by = 20))
+```
+
+The distribution of highs of the VOO stock has a mean of $`r round(mean(VOO_clean$Low),2)`, which aligns with the usual low range, and a range from $`r round(min(VOO_clean$Low),2)`to $`r max(VOO_clean$Low)`, which shows a $`r max(VOO_clean$Low) - min(VOO_clean$Low)` difference. The shape of the graph is left skewed.
+
+```{r}
+# Barplot showing number of gains vs no gains in VOO ETF from the past year
+
+ggplot(VOO_clean) + geom_bar(aes(x=Gain), fill = 'dark green', col = 'black') + labs(title = "Count of Gain and No Gain in VOO Dataset", x = "Gain or No Gain", y = "Count")
+```
+
+This graph shows that there were more Gains in the VOO ETF in the past year as compared to No Gain, which shows that, on average in the past year, VOO showed an increase more days than it saw a decrease. The number of Gains is `r sum(VOO_clean$Gain == "Gain")` and the number of days with no gains is `r sum(VOO_clean$Gain == "No Gain")`.
+
+```{r}
+# Boxplot showing distribution of volume of VOO shares sold
+
+VOO_volume_millions = VOO_clean |>
+  mutate(Volume = Volume / 1000000)
+
+ggplot(VOO_volume_millions) + geom_histogram(aes(x = Volume), bins = 25, fill = "dark green", col = 'black') + labs(title = "Distribution of Shares Sold in Millions", x = "Shares (millions)", y = "Count")
+```
+
+The shape of the distribution of shares sold is right skewed. The average number of shares sold is `r round(mean(VOO_volume_millions$Volume),2)`, and the standard deviation is `r round(sd(VOO_volume_millions$Volume),2)`, which shows that the data is highly spread out, showing a high variability of shares being sold the past year.
+
+
+<h1 style="font-family: 'Times New Roman'; font-weight: bold;"> Trends in Stock Gains, Trading Volume, and Volatility by Quarter</h1>
+
+```{r}
+# Barplot showing spread of Gain and No Gain across yearly quarters 
+
+gain_per_quarter = data.frame(table(VOO_clean$Quarter, VOO_clean$Gain))
+colnames(gain_per_quarter) = c("Quarter", "Gain", "Frequency")
+
+# Function to find the average number of gain and no gains per year
+get_avg_gain = function(data, gain_type){
+  subset_data = data[data$Gain == gain_type, ]
+  avg = mean(subset_data$Frequency)
+  return(avg)
+}
+gain_avg = get_avg_gain(gain_per_quarter, "Gain")
+nogain_avg = get_avg_gain(gain_per_quarter, "No Gain")
+
+ggplot(gain_per_quarter) + geom_col(aes(x = Quarter, y = Frequency, fill = Gain), position = "Dodge", col = 'black') + labs(title = "Number of Gains & No Gains per Quarter")
+
+```
+
+The average number of gains in the year is `r gain_avg`, while the average number of no gains is `r nogain_avg`, and looking at the graph above, it can be concluded that, on average, there are more Gains as compared to No Gains per quarter, showing an overall increase in stock over the year. Additionally, from the graph it can be concluded that Q2 experienced the most number of daily gains, and the number of No Gains in Q4 is equivalent to Gains in Q2.
+
+```{r}
+# Graph showing which quarter had the highest volatility
+
+ggplot(VOO_volume_millions) + geom_boxplot(aes(x = Quarter, y = Volume, fill = Quarter), col = 'black') + labs(title = "Distribution of Shares Sold per Quarter in Millions", y = "Volume (millions)")
+
+# Table showing average shares sold in millions per quarter
+
+avg_quarterly_shares = VOO_volume_millions |>
+  group_by(Quarter) |>
+  summarize(avg_shares = round(mean(Volume), 2))
+
+colnames(avg_quarterly_shares) = c("Quarter", "Mean of Shares")
+kable(avg_quarterly_shares, caption = "Average Shares sold per Quarter (Millions)")
+
+# Function creating subsets to separate data by quarter to easier find statistics of shares per quarter
+quarterly_shares = function(Quarter){
+  if(Quarter == "Q1"){
+    Q_subset = VOO_volume_millions[VOO_volume_millions$Quarter == "Q1", ]
+  }else if(Quarter == "Q2"){
+    Q_subset = VOO_volume_millions[VOO_volume_millions$Quarter == "Q2", ]
+  }else if(Quarter == "Q3"){
+    Q_subset = VOO_volume_millions[VOO_volume_millions$Quarter == "Q3", ]
+  }else if(Quarter == "Q4"){
+    Q_subset = VOO_volume_millions[VOO_volume_millions$Quarter == "Q4", ]
+  }
+  return(Q_subset)
+}
+```
+
+From the grouped box plot above, the range of Q2's shares is `r round(range(quarterly_shares("Q2")$Volume),2)` with a mean of `r avg_quarterly_shares[2,2]`. From this it can be concluded that that the quarter with the most shares sold is Q2, as the higher range and average number of shares sold mean more shares being sold, we can additionally see this by looking at the IQR of Q2 which is `r round(IQR(quarterly_shares("Q2")$Volume),2)`. Comparing this to the other IQR from different quarters, Q1 has an IQR of `r round(IQR(quarterly_shares("Q1")$Volume),2)`, Q3 has an IQR of `r round(IQR(quarterly_shares("Q3")$Volume),2)`, and Q4 has an IQR of `r round(IQR(quarterly_shares("Q4")$Volume),2)`. The IQR represents day to day, which shows that the first quarter has the highest number of day to day shares sold.
+
+```{r}
+# Graph showing relationship between daily range and number of shares sold 
+
+ggplot(VOO_volume_millions) + geom_point(aes(x=Volume, y=Daily_range)) + labs(title = "Relationship between Volume of Shares Sold and Daily Range", x = "Number of Shares Sold", y = "Daily Range ($)")
+```
+
+The graph shows a strong correlation between the daily range and volume of shares, meaning the more shares sold per day the higher the range is. The correlation between the two is `r round(cor(VOO_clean$Daily_range, VOO_clean$Volume),2)`, which shows a strong positive linear relationship. The center of the plot is `r round(mean(VOO_volume_millions$Volume),2)`, `r round(mean(VOO_volume_millions$Daily_range),2)`, and since most of the points are around that area, this proves that the number of shares sold does have an impact on stock price.
+
+
+```{r}
+# Graph showing total daily ranges per quarter
+
+ggplot(VOO_clean) + geom_col(aes(x=Quarter, y = Daily_range, fill = Quarter), position = "dodge2", col = 'black') + labs(title = "Daily Price Volatiltiy by Quarter", y = "Total Daily Price Range")
+```
+
+This graph shows which quarter had the most volatility from a day to day basis. Looking at the graph we can see that Q2 has the highest volatility from a day to day basis, espeically nearing the end of the quarter. Looking at the average daily price for each quarter, Q1 (`r  round(mean(quarterly_shares("Q1")$Daily_range),2)`), Q2 (`r round(mean(quarterly_shares("Q2")$Daily_range),2)`), Q3 (`r round(mean(quarterly_shares("Q3")$Daily_range),2)`), Q4 (`r round(mean(quarterly_shares("Q4")$Daily_range),2)`), it can be concluded that Q2 has the highest volatility in the past year. Additionally, we can see that in Q2 the standard deviation of daily range is `r round(sd(quarterly_shares("Q2")$Daily_range),2)` and `r round(sd(quarterly_shares("Q3")$Daily_range),2)` in Q3, which shows that in Q2 there were very big swings in the stock market as compared to Q3 which has a much lower volatility.
+
+<h1 style="font-family: 'Times New Roman'; font-weight: bold;">Conclusion</h1>
+
+Overall, this analysis provides an overview of VOO’s trends over the past year. Across all trading days, VOO experienced more Gains than No Gains, suggesting that the ETF trended upward. When the data was separated into quarters, Q2 consistently stood out: it had the highest number of Gain days, the highest average trading volume, and the highest daily price volatility. The boxplots and averages showed that shares traded in Q2 were noticeably larger in both range and magnitude compared to the other quarters. There was also a strong positive correlation between the number of shares traded and the daily price range. This means that days with heavier trading activity tended to have larger movements between the high and low prices, this relationship aligns with typical market behavior.
+
+Finally, the comparison of average daily ranges confirmed that Q2 was the most volatile quarter overall, showing larger price swings and higher variability in volume. VOO's past year shows an overall upward trend with periods of heightened volatility, such as in Q2, driven by higher trading volumes and wider daily price ranges. This analysis provides insight into how volume, volatility, and quarterly patterns interact. 
+
+<h1 style="font-family: 'Times New Roman'; font-weight: bold;">References</h1>
+
+Yahoo Finance, VOO ETF, https://finance.yahoo.com/quote/VOO/history/, November 14, 2025.
+
